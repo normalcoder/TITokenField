@@ -30,13 +30,22 @@
 
 @class TITokenField, TIToken;
 
+typedef enum {
+    TITokenizeTypeTokenizingCharachterOccured,
+    TITokenizeTypeReturnBtnTapped,
+    TITokenizeTypeCaseSelected,
+    TITokenizeTypeEndEditing,
+    TITokenizeTypeManual,
+    TITokenizeTypeManualTokenizedText,
+} TITokenizeType;
+
 //==========================================================
 #pragma mark - Delegate Methods -
 //==========================================================
 @protocol TITokenFieldDelegate <UITextFieldDelegate>
 @optional
-- (BOOL)tokenField:(TITokenField *)tokenField willAddToken:(TIToken *)token;
-- (void)tokenField:(TITokenField *)tokenField didAddToken:(TIToken *)token;
+- (BOOL)tokenField:(TITokenField *)tokenField willAddToken:(TIToken *)token type:(TITokenizeType)type;
+- (void)tokenField:(TITokenField *)tokenField didAddToken:(TIToken *)token type:(TITokenizeType)type;
 - (BOOL)tokenField:(TITokenField *)tokenField willRemoveToken:(TIToken *)token;
 - (void)tokenField:(TITokenField *)tokenField didRemoveToken:(TIToken *)token;
 
@@ -84,6 +93,9 @@
 @property (nonatomic, readonly) NSArray * tokenTitles;
 
 - (void)updateContentSize;
+
+- (void)setResults:(NSArray *)results;
+- (void)setSearchResultsVisible:(BOOL)visible;
 
 @end
 

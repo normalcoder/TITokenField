@@ -13,11 +13,18 @@
 #pragma mark - TITokenFieldView -
 //==========================================================
 
+@interface TITokenField ()
+- (void)addToken:(TIToken *)title type:(TITokenizeType)type;
+- (TIToken *)addTokenWithTitle:(NSString *)title type:(TITokenizeType)type;
+- (TIToken *)addTokenWithTitle:(NSString *)title representedObject:(id)object type:(TITokenizeType)type;
+@end
+
+
 @interface TITokenFieldView (Private)
 - (void)setup;
 - (NSString *)displayStringForRepresentedObject:(id)object;
 - (NSString *)searchResultStringForRepresentedObject:(id)object;
-- (void)setSearchResultsVisible:(BOOL)visible;
+//- (void)setSearchResultsVisible:(BOOL)visible;
 - (void)resultsForSearchString:(NSString *)searchString;
 - (void)presentpopoverAtTokenFieldCaretAnimated:(BOOL)animated;
 @end
@@ -212,7 +219,7 @@
 	
 	id representedObject = [resultsArray objectAtIndex:indexPath.row];
     TIToken * token = [[TIToken alloc] initWithTitle:[self displayStringForRepresentedObject:representedObject] representedObject:representedObject];
-    [tokenField addToken:token];
+    [tokenField addToken:token type:TITokenizeTypeCaseSelected];
 	[token release];
 	
 	[tableView deselectRowAtIndexPath:indexPath animated:YES];
@@ -231,7 +238,7 @@
 }
 
 - (void)tokenFieldTextDidChange:(TITokenField *)field {
-	[self resultsForSearchString:field.text];
+	//[self resultsForSearchString:field.text];
 }
 
 - (void)tokenFieldFrameWillChange:(TITokenField *)field {
@@ -290,6 +297,14 @@
 		[resultsTable setHidden:!visible];
 		[tokenField setResultsModeEnabled:visible];
 	}
+}
+
+- (void)setResults:(NSArray *)results {
+	[resultsArray removeAllObjects];
+    [resultsArray addObjectsFromArray:results];
+	[resultsTable reloadData];
+    
+	[self setSearchResultsVisible:(resultsArray.count > 0)];
 }
 
 - (void)resultsForSearchString:(NSString *)searchString {
@@ -381,6 +396,7 @@ NSString * const kTextHidden = @"\u200D"; // Zero-Width Joiner
 @interface TITokenField (Private)
 - (void)setup;
 - (CGFloat)layoutTokensInternal;
+- (void)addToken:(TIToken *)title type:(TITokenizeType)type;
 @end
 
 @implementation TITokenField
@@ -495,7 +511,10 @@ NSString * const kTextHidden = @"\u200D"; // Zero-Width Joiner
 }
 
 - (void)didBeginEditing {
-	[tokens enumerateObjectsUsingBlock:^(TIToken * token, NSUInteger idx, BOOL *stop){[self addToken:token];}];
+    NSMutableArray * tokensCopy = [NSMutableArray arrayWithArray:tokens];
+    for (TIToken * t in tokensCopy) {
+        [self addToken:t type:TITokenizeTypeManual];
+    }
 }
 
 - (void)didEndEditing {
@@ -503,7 +522,7 @@ NSString * const kTextHidden = @"\u200D"; // Zero-Width Joiner
 	[selectedToken setSelected:NO];
 	selectedToken = nil;
 	
-	[self tokenizeText];
+	[self tokenizeText:TITokenizeTypeEndEditing];
 	
 	if (removesTokensOnEndEditing){
 		
@@ -552,15 +571,24 @@ NSString * const kTextHidden = @"\u200D"; // Zero-Width Joiner
 }
 
 #pragma mark Token Handling
+
 - (TIToken *)addTokenWithTitle:(NSString *)title {
-	return [self addTokenWithTitle:title representedObject:nil];
+    return [self addTokenWithTitle:title representedObject:nil type:TITokenizeTypeManual];
+}
+
+- (TIToken *)addTokenWithTitle:(NSString *)title type:(TITokenizeType)type {
+	return [self addTokenWithTitle:title representedObject:nil type:type];
 }
 
 - (TIToken *)addTokenWithTitle:(NSString *)title representedObject:(id)object {
+    return [self addTokenWithTitle:title representedObject:object type:TITokenizeTypeManual];
+}
+
+- (TIToken *)addTokenWithTitle:(NSString *)title representedObject:(id)object type:(TITokenizeType)type {
 	
 	if (title.length){
 		TIToken * token = [[TIToken alloc] initWithTitle:title representedObject:object font:self.font];
-		[self addToken:token];
+		[self addToken:token type:type];
 		return [token autorelease];
 	}
 	
@@ -568,10 +596,14 @@ NSString * const kTextHidden = @"\u200D"; // Zero-Width Joiner
 }
 
 - (void)addToken:(TIToken *)token {
+    [self addToken:token type:TITokenizeTypeManual];
+}
+
+- (void)addToken:(TIToken *)token type:(TITokenizeType)type {
 	
 	BOOL shouldAdd = YES;
-	if ([delegate respondsToSelector:@selector(tokenField:willAddToken:)]){
-		shouldAdd = [delegate tokenField:self willAddToken:token];
+	if ([delegate respondsToSelector:@selector(tokenField:willAddToken:type:)]){
+		shouldAdd = [delegate tokenField:self willAddToken:token type:type];
 	}
 	
 	if (shouldAdd){
@@ -584,9 +616,9 @@ NSString * const kTextHidden = @"\u200D"; // Zero-Width Joiner
 		
 		if (![tokens containsObject:token]) {
 			[tokens addObject:token];
-		
-			if ([delegate respondsToSelector:@selector(tokenField:didAddToken:)]){
-				[delegate tokenField:self didAddToken:token];
+            
+			if ([delegate respondsToSelector:@selector(tokenField:didAddToken:type:)]){
+				[delegate tokenField:self didAddToken:token type:type];
 			}
 		}
 		
@@ -648,12 +680,16 @@ NSString * const kTextHidden = @"\u200D"; // Zero-Width Joiner
 }
 
 - (void)tokenizeText {
+    [self tokenizeText:TITokenizeTypeManualTokenizedText];
+}
+
+- (void)tokenizeText:(TITokenizeType)type {
 	
 	__block BOOL textChanged = NO;
 	
 	if (![self.text isEqualToString:kTextEmpty] && ![self.text isEqualToString:kTextHidden]){
 		[[self.text componentsSeparatedByCharactersInSet:tokenizingCharacters] enumerateObjectsUsingBlock:^(NSString * component, NSUInteger idx, BOOL *stop){
-			[self addTokenWithTitle:[component stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]];
+			[self addTokenWithTitle:[component stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] type:type];
 			textChanged = YES;
 		}];
 	}
@@ -892,7 +928,7 @@ NSString * const kTextHidden = @"\u200D"; // Zero-Width Joiner
 	}
 	
 	if ([string rangeOfCharacterFromSet:tokenField.tokenizingCharacters].location != NSNotFound){
-		[tokenField tokenizeText];
+		[tokenField tokenizeText:TITokenizeTypeTokenizingCharachterOccured];
 		return NO;
 	}
 	
@@ -905,7 +941,7 @@ NSString * const kTextHidden = @"\u200D"; // Zero-Width Joiner
 
 - (BOOL)textFieldShouldReturn:(UITextField *)textField {
 	
-	[tokenField tokenizeText];
+    [tokenField tokenizeText:TITokenizeTypeReturnBtnTapped];
 	
 	if ([delegate respondsToSelector:@selector(textFieldShouldReturn:)]){
 		return [delegate textFieldShouldReturn:textField];
